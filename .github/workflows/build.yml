@@ -1,0 +1,57 @@
+name: OI Pro Generator – Auto ZIP Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Find ZIP file
+      id: findzip
+      run: |
+        ZIP_FILE=$(ls *.zip | head -n 1 || true)
+        if [ -z "$ZIP_FILE" ]; then
+          echo "❌ No ZIP file found in repository root."
+          exit 1
+        fi
+        echo "ZIP file found: $ZIP_FILE"
+        echo "zipname=$ZIP_FILE" >> $GITHUB_OUTPUT
+
+    - name: Extract ZIP
+      run: |
+        unzip "${{ steps.findzip.outputs.zipname }}" -d project
+        echo "ZIP extracted into project/"
+
+    - name: Move extracted files correctly
+      run: |
+        # اگر داخل ZIP یک فولدر اصلی وجود داشت، محتوا را یک لایه بالاتر می‌آوریم
+        INNER_DIR=$(ls project | head -n 1)
+        if [ -d "project/$INNER_DIR/app" ]; then
+          mv project/$INNER_DIR/* project/
+          rm -rf "project/$INNER_DIR"
+        fi
+        echo "Project structure fixed"
+
+    - name: Setup JDK
+      uses: actions/setup-java@v3
+      with:
+        distribution: temurin
+        java-version: 17
+
+    - name: Grant execute permission for Gradle
+      run: chmod +x project/gradlew
+
+    - name: Build APK
+      working-directory: project
+      run: ./gradlew assembleRelease --stacktrace
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: OI-Pro-Generator-APK
+        path: project/app/build/outputs/apk/release/*.apk
